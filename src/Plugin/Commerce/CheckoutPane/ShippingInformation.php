@@ -187,6 +187,8 @@ class ShippingInformation extends CheckoutPaneBase implements ContainerFactoryPl
       '#default_value' => $shipping_profile,
       '#default_country' => $store->getAddress()->getCountryCode(),
       '#available_countries' => $available_countries,
+      '#profile_type' => 'customer',
+      '#owner_uid' => $this->order->getCustomerId(),
     ];
     $pane_form['recalculate_shipping'] = [
       '#type' => 'button',
@@ -213,6 +215,13 @@ class ShippingInformation extends CheckoutPaneBase implements ContainerFactoryPl
     $recalculate_shipping = $form_state->get('recalculate_shipping');
     $force_packing = empty($shipments) && empty($this->configuration['require_shipping_profile']);
     if ($recalculate_shipping || $force_packing) {
+      if (!$shipping_profile) {
+        $shipping_profile = $this->entityTypeManager->getStorage('profile')->create([
+          'type' => 'customer',
+          'uid' => $this->order->getCustomerId(),
+        ]);
+      }
+
       list($shipments, $removed_shipments) = $this->packerManager->packToShipments($this->order, $shipping_profile, $shipments);
 
       // Store the IDs of removed shipments for submitPaneForm().
@@ -296,7 +305,8 @@ class ShippingInformation extends CheckoutPaneBase implements ContainerFactoryPl
       $form_display->removeComponent('shipping_profile');
       $form_display->removeComponent('title');
       $form_display->extractFormValues($shipment, $pane_form['shipments'][$index], $form_state);
-      $shipment->setShippingProfile($pane_form['shipping_profile']['#profile']);
+      $profile = NestedArray::getValue($pane_form, ['shipping_profile', '#default_value']);
+      $shipment->setShippingProfile($profile);
       $shipment->save();
       $shipments[] = $shipment;
     }
@@ -327,12 +337,6 @@ class ShippingInformation extends CheckoutPaneBase implements ContainerFactoryPl
     foreach ($this->order->shipments->referencedEntities() as $shipment) {
       $shipping_profile = $shipment->getShippingProfile();
       break;
-    }
-    if (!$shipping_profile) {
-      $shipping_profile = $this->entityTypeManager->getStorage('profile')->create([
-        'type' => 'customer',
-        'uid' => $this->order->getCustomerId(),
-      ]);
     }
 
     return $shipping_profile;
